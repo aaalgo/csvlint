@@ -24,10 +24,16 @@ namespace ba = boost::accumulators;
 namespace qi = boost::spirit::qi;
 typedef ba::accumulator_set<double, ba::stats<ba::tag::mean, ba::tag::variance>> Acc;
 
+struct Column {
+    vector<csvlint::crange> strings;
+    vector<float> floats;
+    size_t missing;
+};
+
 struct Chunk {
     vector<string> lines;
     vector<csvlint::crange> cols;
-    vector<vector<csvlint::crange>> data;
+    vector<Column> data;
     size_t total;
 };
 
@@ -74,17 +80,11 @@ void stat_number (csvlint::Field const &f,  vector<Chunk> const &chunks, string 
     unsigned missing = 0;
     Acc acc;
     for (auto const &ch: chunks) {
-        for (auto e: ch.data[col]) {
-            if (e.missing()) {
-                ++missing;
-            }
-            else {
-                float v;
-                qi::parse(e.begin(), e.end(), qi::float_, v);
-                acc(v);
-                all[off++] = v;
-            }
+        for (float e: ch.data[col].floats) {
+            all[off++] = e;
+            acc(e);
         }
+        missing += ch.data[col].missing;
     }
     all.resize(off);
     vector<float> ps{0, 0.25, 0.5, 0.75, 1.0};
@@ -123,7 +123,7 @@ int main (int argc, char *argv[]) {
     desc_visible.add_options()
     ("help,h", "produce help message.")
     ("input,I", po::value(&input_path), "input path")
-    (",M", po::value(&guess_size)->default_value(100), "")
+    (",M", po::value(&guess_size)->default_value(10), "")
     ;
     po::options_description desc("Allowed options");
     desc.add(desc_visible);
@@ -152,13 +152,30 @@ int main (int argc, char *argv[]) {
     for (auto &ch: text) {
         ch.total = 0;
         ch.data.resize(fmt.fields.size());
+        for (auto &v: ch.data) {
+            v.missing = 0;
+        }
     }
     text.lines ([&fmt](char const *begin, char const *end, Chunk *ch, size_t i_in_block) {
+        auto &cols = ch->cols;
         ch->lines.emplace_back(begin, end);
-        bool r = fmt.parse(csvlint::crange(std::ref(ch->lines.back())), &ch->cols);
+        bool r = fmt.parse(csvlint::crange(std::ref(ch->lines.back())), &cols);
         if (r) {
-            for (unsigned i = 0; i < ch->cols.size(); ++i) {
-                ch->data[i].push_back(ch->cols[i]);
+            for (unsigned i = 0; i < fmt.fields.size(); ++i) {
+                Column &data = ch->data[i];
+                auto const &field = fmt.fields[i];
+                csvlint::crange e = cols[i];
+                if (e.missing()) {
+                    ++data.missing;
+                }
+                else if (field.type == csvlint::TYPE_NUMERIC) {
+                    float v;
+                    qi::parse(e.begin(), e.end(), qi::float_, v);
+                    data.floats.push_back(v);
+                }
+                else {
+                    data.strings.push_back(e);
+                }
             }
         }
         ++ch->total;
