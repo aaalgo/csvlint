@@ -1,20 +1,118 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <unordered_set>
 #include <boost/format.hpp>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/variance.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/progress.hpp>
 #include <boost/program_options.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/utility/setup/console.hpp>
+#define LOG(x) BOOST_LOG_TRIVIAL(x)
 #include "csvlint.h"
+#define USE_OPENMP 1
 #include "bigtext.h"
 
 using namespace std;
 using namespace boost;
 namespace po = boost::program_options; 
+namespace ba = boost::accumulators;
+namespace qi = boost::spirit::qi;
+typedef ba::accumulator_set<double, ba::stats<ba::tag::mean, ba::tag::variance>> Acc;
 
-struct State {
+struct Chunk {
+    vector<string> lines;
     vector<csvlint::crange> cols;
-    size_t good;
+    vector<vector<csvlint::crange>> data;
     size_t total;
 };
+
+size_t total (vector<Chunk> const &chunks) {
+    size_t v = 0;
+    for (auto const &ch: chunks) {
+        v += ch.total;
+    }
+    return v;
+}
+
+size_t good (vector<Chunk> const &chunks) {
+    size_t v = 0;
+    for (auto const &ch: chunks) {
+        v += ch.data.size();
+    }
+    return v;
+}
+
+// percentiles must be previously sorted
+void percentiles (vector<float> &all, vector<float> &ps) {
+    vector<size_t> offs(ps.size());
+    for (unsigned i = 0; i < offs.size(); ++i) {
+        offs[i] = round(ps[i] * all.size());
+        if (offs[i] >= all.size()) {
+            offs[i] = all.size() - 1;
+        }
+        if (i) {
+            BOOST_VERIFY(offs[i] > offs[i-1]);
+        }
+    }
+    size_t last = 0;
+    for (unsigned i = 0; i < offs.size(); ++i) {
+        nth_element(all.begin() + last, all.begin() + offs[i], all.end());
+        ps[i] = all[offs[i]];
+        last = offs[i];
+    }
+}
+
+void stat_number (csvlint::Field const &f,  vector<Chunk> const &chunks, string *out) {
+    vector<float> all(good(chunks));
+    unsigned col = f.column;
+    unsigned off = 0;
+    unsigned missing = 0;
+    Acc acc;
+    for (auto const &ch: chunks) {
+        for (auto e: ch.data[col]) {
+            if (e.missing()) {
+                ++missing;
+            }
+            else {
+                float v;
+                qi::parse(e.begin(), e.end(), qi::float_, v);
+                acc(v);
+                all[off++] = v;
+            }
+        }
+    }
+    all.resize(off);
+    vector<float> ps{0, 0.25, 0.5, 0.75, 1.0};
+    percentiles(all, ps);
+    ostringstream ss;
+    ss << f.column <<':' << f.name 
+        << ',' << missing
+        << ',' << all.size()
+        << ',' << ba::mean(acc)
+        << ',' << sqrt(ba::variance(acc));
+    for (auto v: ps) {
+        ss << ',' << v;
+    }
+    *out = ss.str();
+}
+
+void stat_string (csvlint::Field const &f, vector<Chunk> const &chunks, string *out) {
+}
+
+void stat_column (csvlint::Field const &f, vector<Chunk> const &chunks, string *out) {
+    if (f.type == csvlint::TYPE_NUMERIC) {
+        stat_number(f, chunks, out);
+    }
+    else if (f.type == csvlint::TYPE_STRING) {
+        stat_string(f, chunks, out);
+    }
+    else BOOST_VERIFY(0);
+}
 
 int main (int argc, char *argv[]) {
     unsigned guess_size;
@@ -43,36 +141,49 @@ int main (int argc, char *argv[]) {
         return 0;
     }
 
+    boost::log::add_console_log(cerr);
+
     csvlint::Format fmt;
     fmt.train(input_path, guess_size * 1024 * 1024);
 
-    /*
-    size_t max_chunk = fmt.max_line * 100;
-    size_t constexpr MIN_CHUNK = 12 * 1024 * 1024;
-    if (max_chunk < MIN_CHUNK) max_chunk = MIN_CHUNK;
-    */
+    cerr << "Parsing text..." << endl;
+    BigText<Chunk> text(input_path, fmt.data_offset, '\n', fmt.max_line, 10 * 1024*1024);
 
-    BigText<State> text(input_path, fmt.data_offset, '\n', fmt.max_line);
-
-    for (auto &state: text) {
-        state.total = state.good = 0;
+    for (auto &ch: text) {
+        ch.total = 0;
+        ch.data.resize(fmt.fields.size());
     }
-
-    text.lines ([&fmt](char const *begin, char const *end, State *st, size_t i_in_block) {
-        bool r = fmt.parse(csvlint::crange(begin, end), &st->cols);
+    text.lines ([&fmt](char const *begin, char const *end, Chunk *ch, size_t i_in_block) {
+        ch->lines.emplace_back(begin, end);
+        bool r = fmt.parse(csvlint::crange(std::ref(ch->lines.back())), &ch->cols);
         if (r) {
-            ++st->good;
+            for (unsigned i = 0; i < ch->cols.size(); ++i) {
+                ch->data[i].push_back(ch->cols[i]);
+            }
         }
-        ++st->total;
+        ++ch->total;
     });
 
-    size_t total = 0, good = 0;
-    for (auto const &state: text) {
-        total += state.total;
-        good += state.good;
+    cerr << total(text) << " total lines." << endl;
+    cerr << good(text) << " good lines." << endl;
+
+    vector<string> stats(fmt.fields.size());
+
+    cerr << "Counting numbers..." << endl;
+    progress_display progress(fmt.fields.size(), cerr);
+#pragma omp parallel for
+    for (unsigned i = 0; i < fmt.fields.size(); ++i) {
+        stat_column(fmt.fields[i], text, &stats[i]);
+#pragma omp critical
+        ++progress;
     }
-    cout << total << " total lines." << endl;
-    cout << good << " good lines." << endl;
+
+    for (auto &st: stats) {
+        if (st.empty()) continue;
+        cout << st << endl;
+    }
+
+
 
     return 0;
 }

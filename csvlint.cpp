@@ -436,6 +436,7 @@ not_numeric:
                 }
             }
             for (unsigned i = 0; i < columns; ++i) {
+                fields[i].column = i;
                 trainField(matrix[i], &fields[i], &fields_ext[i]);
             }
         }
@@ -517,7 +518,7 @@ not_numeric:
 
     void Format::summary (ostream &os, bool details) const {
         for (unsigned i = 0; i < fields.size(); ++i) {
-            os << "COL:" << (i+1);
+            os << "COL:" << i;
             auto const &field = fields[i];
             os << " NAME:" << field.name;
             os << " TYPE:";

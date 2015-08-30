@@ -25,6 +25,7 @@ namespace csvlint {
     };
 
     struct Field {
+        int column;
         string name;
         int type;                // numeric / nominal / string
         bool quoted;

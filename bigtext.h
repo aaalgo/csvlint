@@ -62,7 +62,7 @@ public:
         boost::progress_display progress(chunks, std::cerr);
 #ifdef USE_OPENMP
         std::vector<std::string> bufs(omp_get_max_threads());
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic, 1)
 #else
         std::string buf;
 #endif
