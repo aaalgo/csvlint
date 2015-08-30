@@ -375,6 +375,12 @@ not_numeric:
         Text lines(path, max_buffer);
 
         eol_type = detect_and_trim_eol(&lines);
+        if (eol_type == EOL_UNIX) {
+            eol_str = "\n";
+        }
+        else {
+            eol_str = "\r\n";
+        }
 
         unsigned columns;
         fs_char = detect_fs(lines, &columns);
@@ -453,7 +459,8 @@ not_numeric:
                 LOG(info) << "detected N/A string: \"" << na_str << "\".";
             }
         }
-        hasHeader = false;
+        has_header = false;
+        header_quoted = false;
         if (lines.size() > prelude) { // test first line
             vector<crange> cols;
             split(lines[prelude], fs_char, &cols);
@@ -466,29 +473,35 @@ not_numeric:
                 for (unsigned i = 0; i < cols.size(); ++i) {
                     if (fields[i].type == TYPE_NUMERIC) {
                         if (!is_numeric(cols[i])) {
-                            hasHeader = true;
+                            has_header = true;
                             break;
                         }
                     }
                     /*
                     else if (fmt->fields[i].type == TYPE_NOMINAL) {
                         if (fmt->fields[i].values.count(unquote(cols[i], fmt->quote)) == 0) {
-                            fmt->hasHeader = true;
+                            fmt->has_header = true;
                             break;
                         }
                     }
                     */
                     else if (fields[i].quoted && cols[i].size() && (cols[i].front() != quote_char)) {
-                        hasHeader = true;
+                        has_header = true;
                         break;
                     }
                 }
             }
-            if (hasHeader) {
+            if (has_header) {
                 LOG(info) << "header line detected.";
                 for (unsigned i = 0; i < columns; ++i) {
                     if (is_quoted(cols[i], quote_char)) {
                         fields[i].name = unquote(cols[i], quote_char);
+                        if (i > 0) {
+                            BOOST_VERIFY(header_quoted);
+                        }
+                        else {
+                            header_quoted = true;
+                        }
                     }
                     else {
                         fields[i].name = string(cols[i].begin(), cols[i].end());
@@ -498,7 +511,7 @@ not_numeric:
 
         }
         unsigned start = prelude;
-        if (hasHeader) ++start;
+        if (has_header) ++start;
         data_offset = lines[start].begin() - lines.origin();
     }
 
@@ -561,6 +574,39 @@ not_numeric:
             }
         }
         return true;
+    }
+
+    void Format::write_header (ostream &os) const {
+        for (unsigned i = 0; i < fields.size(); ++i) {
+            if (i) {
+                os << fs_char;
+            }
+            if (header_quoted) {
+                os << quote_char << fields[i].name << quote_char;
+            }
+            else {
+                os << fields[i].name;
+            }
+        }
+        os << eol_str;
+    }
+
+    void Format::write_line (ostream &os, vector<crange> const &in) const {
+        for (unsigned i = 0; i < fields.size(); ++i) {
+            if (i) {
+                os << fs_char;
+            }
+            if (in[i].missing()) {
+                os << na_str;
+            }
+            else if (fields[i].quoted) {
+                os << quote_char << string(in[i].begin(), in[i].end()) << quote_char;
+            }
+            else {
+                os << string(in[i].begin(), in[i].end());
+            }
+        }
+        os << eol_str;
     }
 }
 

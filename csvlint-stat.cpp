@@ -74,8 +74,5 @@ int main (int argc, char *argv[]) {
     cout << total << " total lines." << endl;
     cout << good << " good lines." << endl;
 
-
-
-
     return 0;
 }

@@ -43,6 +43,8 @@ namespace csvlint {
     public:
         crange (): na(false) {
         }
+        crange (string const &str): ::boost::iterator_range<const char *>(&str[0], &str[0] + str.size()), na(false) {
+        }
         crange (char const *begin, char const *end) : ::boost::iterator_range<const char*>(begin, end), na(false) {
         }
         crange (char const *begin, char const *end, bool na_) : ::boost::iterator_range<const char*>(begin, end), na(na_) {
@@ -58,10 +60,12 @@ namespace csvlint {
         void trainField (vector<crange> const &, Field *, FieldExt *);
     public:
         int eol_type;            // end of line types, could be multiple chars
+        string eol_str;
         char fs_char;            // field separator
         char quote_char;
         string na_str;           // N/A string
-        bool hasHeader;
+        bool has_header;
+        bool header_quoted;
         //bool hasRowId;           // first column is row ID, header missing the row ID column.
         unsigned prelude;
         size_t data_offset;
@@ -73,5 +77,7 @@ namespace csvlint {
         void summary (ostream &os, bool details) const;
         // whether parse successful
         bool parse (crange in, vector<crange> *out) const;
+        void write_header (ostream &os) const;
+        void write_line (ostream &os, vector<crange> const &) const;
     };
 }
