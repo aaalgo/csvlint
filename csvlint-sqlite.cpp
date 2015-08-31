@@ -63,6 +63,7 @@ int main (int argc, char *argv[]) {
 
     ofstream os(output_path);
     // write header
+    os << "begin transaction;" << endl;
     os << "create table " << table_name << '(';
 
     for (unsigned i = 0; i < fmt.fields.size(); ++i) {
@@ -114,6 +115,7 @@ int main (int argc, char *argv[]) {
         }
         os << ");" << endl;
     }
+    os << "commit;" << endl;
 
     return 0;
 }
