@@ -141,6 +141,7 @@ void stat_column (csvlint::Field const &f, vector<Chunk> const &chunks, string *
         string o1, o2;
         stat_number(f, chunks, &o1);
         stat_string(f, chunks, &o2, 'I');
+        o1.push_back('\n');
         *out = o1 + o2;
     }
     else if (f.type == csvlint::TYPE_STRING) {
