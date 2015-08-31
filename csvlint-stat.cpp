@@ -138,8 +138,10 @@ void stat_string (csvlint::Field const &f, vector<Chunk> const &chunks, string *
 
 void stat_column (csvlint::Field const &f, vector<Chunk> const &chunks, string *out) {
     if (f.type == csvlint::TYPE_NUMERIC) {
-        stat_number(f, chunks, out);
-        stat_string(f, chunks, out, 'I');
+        string o1, o2;
+        stat_number(f, chunks, &o1);
+        stat_string(f, chunks, &o2, 'I');
+        *out = o1 + o2;
     }
     else if (f.type == csvlint::TYPE_STRING) {
         stat_string(f, chunks, out);
