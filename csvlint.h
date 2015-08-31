@@ -56,6 +56,8 @@ namespace csvlint {
         }
     };
 
+    ostream &operator << (ostream &os, crange e);
+
     struct Format {
     private:
         void trainField (vector<crange> const &, Field *, FieldExt *);

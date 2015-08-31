@@ -25,6 +25,7 @@ int main (int argc, char *argv[]) {
     desc_visible.add_options()
     ("help,h", "produce help message.")
     ("input,I", po::value(&input_path), "input path")
+    ("output,O", po::value(&output_path), "output path")
     ("rate,r", po::value(&rate)->default_value(0.1), "")
     ("key", po::value(&key), "stratify by this field")
     (",M", po::value(&guess_size)->default_value(10), "")
@@ -79,6 +80,7 @@ int main (int argc, char *argv[]) {
         random_shuffle(v.begin(), v.end());
         for (size_t i = 0; i < use; ++i) {
             os.write(&v[i][0], v[i].size());
+            os.put('\n');
         }
     }
 

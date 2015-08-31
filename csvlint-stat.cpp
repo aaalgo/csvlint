@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <unordered_set>
+#include <unordered_map>
 #include <boost/format.hpp>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -23,6 +23,8 @@ namespace po = boost::program_options;
 namespace ba = boost::accumulators;
 namespace qi = boost::spirit::qi;
 typedef ba::accumulator_set<double, ba::stats<ba::tag::mean, ba::tag::variance>> Acc;
+
+size_t topk = 20;
 
 struct Column {
     vector<csvlint::crange> strings;
@@ -77,7 +79,7 @@ void stat_number (csvlint::Field const &f,  vector<Chunk> const &chunks, string 
     vector<float> all(good(chunks));
     unsigned col = f.column;
     unsigned off = 0;
-    unsigned missing = 0;
+    size_t missing = 0;
     Acc acc;
     for (auto const &ch: chunks) {
         for (float e: ch.data[col].floats) {
@@ -90,7 +92,7 @@ void stat_number (csvlint::Field const &f,  vector<Chunk> const &chunks, string 
     vector<float> ps{0, 0.25, 0.5, 0.75, 1.0};
     percentiles(all, ps);
     ostringstream ss;
-    ss << f.column <<':' << f.name 
+    ss << 'N' << f.column <<':' << f.name 
         << ',' << missing
         << ',' << all.size()
         << ',' << ba::mean(acc)
@@ -101,12 +103,43 @@ void stat_number (csvlint::Field const &f,  vector<Chunk> const &chunks, string 
     *out = ss.str();
 }
 
-void stat_string (csvlint::Field const &f, vector<Chunk> const &chunks, string *out) {
+void stat_string (csvlint::Field const &f, vector<Chunk> const &chunks, string *out, char C='S') {
+    unordered_map<string, size_t> cnts;
+    unsigned col = f.column;
+    size_t missing = 0;
+    for (auto const &ch: chunks) {
+        for (auto e: ch.data[col].strings) {
+            ++cnts[string(e.begin(), e.end())];
+        }
+        missing += ch.data[col].missing;
+    }
+    vector<pair<size_t,string>> sz(cnts.size());
+    {
+        size_t o = 0;
+        for (auto const &p: cnts) {
+            sz[o].first = p.second;
+            sz[o].second = p.first;
+            ++o;
+        }
+    }
+    sort(sz.begin(), sz.end());
+    reverse(sz.begin(), sz.end());
+    ostringstream ss;
+    ss << C << f.column << ':' << f.name << ",NA:" << missing << ",VALUES:" << sz.size();
+    if (sz.size() > topk) sz.resize(topk);
+    for (auto const &e: sz) {
+        ss << ",'" << e.second << "':" << e.first;
+    }
+    if (cnts.size() > sz.size()) {
+        ss << ",...";
+    }
+    *out = ss.str();
 }
 
 void stat_column (csvlint::Field const &f, vector<Chunk> const &chunks, string *out) {
     if (f.type == csvlint::TYPE_NUMERIC) {
         stat_number(f, chunks, out);
+        stat_string(f, chunks, out, 'I');
     }
     else if (f.type == csvlint::TYPE_STRING) {
         stat_string(f, chunks, out);
@@ -124,6 +157,7 @@ int main (int argc, char *argv[]) {
     ("help,h", "produce help message.")
     ("input,I", po::value(&input_path), "input path")
     (",M", po::value(&guess_size)->default_value(10), "")
+    ("topk", po::value(&topk)->default_value(topk), "")
     ;
     po::options_description desc("Allowed options");
     desc.add(desc_visible);
@@ -168,12 +202,12 @@ int main (int argc, char *argv[]) {
                 if (e.missing()) {
                     ++data.missing;
                 }
-                else if (field.type == csvlint::TYPE_NUMERIC) {
-                    float v;
-                    qi::parse(e.begin(), e.end(), qi::float_, v);
-                    data.floats.push_back(v);
-                }
                 else {
+                    if (field.type == csvlint::TYPE_NUMERIC) {
+                        float v;
+                        qi::parse(e.begin(), e.end(), qi::float_, v);
+                        data.floats.push_back(v);
+                    }
                     data.strings.push_back(e);
                 }
             }
@@ -199,8 +233,6 @@ int main (int argc, char *argv[]) {
         if (st.empty()) continue;
         cout << st << endl;
     }
-
-
 
     return 0;
 }

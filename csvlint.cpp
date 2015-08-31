@@ -19,6 +19,14 @@ namespace csvlint {
     static const unsigned LOG_CUT_BREAKER_SAMPLE = 9;
     static const unsigned MAX_CUT_BREAKER_SAMPLE = 100;
 
+    ostream &operator << (ostream &os, crange e) {
+        for (auto i = e.begin(); i != e.end(); ++i) {
+            os.put(*i);
+        }
+        return os;
+    }
+
+
     /// crange doesn't own the underlying data
     typedef vector<crange> Lines;
 
@@ -411,7 +419,7 @@ not_numeric:
                 if (cols.size() != columns) {
                     LOG(info) << "BAD LINE: " << lines[i];
                     for (auto r: cols) {
-                        LOG(info) << "F: " << string(r.begin(), r.end());
+                        LOG(info) << "F: " << r;
                     }
                     continue;
                 }
@@ -429,7 +437,7 @@ not_numeric:
                 }
                 for (unsigned i = 0; i < display; ++i) {
                     auto p = cut_breakers[i];
-                    LOG(info) << "cut-breaker: " << string(p.begin(), p.end());
+                    LOG(info) << "cut-breaker: " << p;
                 }
                 if (display < cut_breakers.size()) {
                     LOG(info) << "more cut-breakers found...";
@@ -601,10 +609,10 @@ not_numeric:
                 os << na_str;
             }
             else if (fields[i].quoted) {
-                os << quote_char << string(in[i].begin(), in[i].end()) << quote_char;
+                os << quote_char << in[i] << quote_char;
             }
             else {
-                os << string(in[i].begin(), in[i].end());
+                os << in[i];
             }
         }
         os << eol_str;
