@@ -232,6 +232,7 @@ int main (int argc, char *argv[]) {
         ++progress;
     }
 
+
     for (auto &st: stats) {
         if (st.empty()) continue;
         cout << st << endl;
