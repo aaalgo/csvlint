@@ -9,7 +9,7 @@ CXXFLAGS += -std=c++11 -fopenmp -g $(OPT) $(STATIC) -Wall -DBOOST_LOG_DYN_LINK
 LDFLAGS += -fopenmp -g $(STATIC)  
 LDLIBS += -lboost_program_options -lboost_log -lboost_log_setup -lboost_thread -lboost_system -ltcmalloc
 
-PROGS = csvlint-probe csvlint-stat csvlint-dump csvlint-sample csvlint-sqlite csvlint-special
+PROGS = csvlint-probe csvlint-stat csvlint-dump csvlint-sample csvlint-sqlite csvlint-special csvlint-cut
 
 all:	$(PROGS)
 

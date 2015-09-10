@@ -586,33 +586,41 @@ not_numeric:
     }
 
     void Format::write_header (ostream &os) const {
-        for (unsigned i = 0; i < fields.size(); ++i) {
-            if (i) {
+        bool first = true;
+        for (auto const &f: fields) {
+            if (first) {
+                first = false;
+            }
+            else {
                 os << fs_char;
             }
             if (header_quoted) {
-                os << quote_char << fields[i].name << quote_char;
+                os << quote_char << f.name << quote_char;
             }
             else {
-                os << fields[i].name;
+                os << f.name;
             }
         }
         os << eol_str;
     }
 
     void Format::write_line (ostream &os, vector<crange> const &in) const {
-        for (unsigned i = 0; i < fields.size(); ++i) {
-            if (i) {
-                os << fs_char;
-            }
-            if (in[i].missing()) {
-                os << na_str;
-            }
-            else if (fields[i].quoted) {
-                os << quote_char << in[i] << quote_char;
+        bool first = true;
+        for (auto const &f: fields) {
+            if (first) {
+                first = false;
             }
             else {
-                os << in[i];
+                os << fs_char;
+            }
+            if (in[f.column].missing()) {
+                os << na_str;
+            }
+            else if (f.quoted) {
+                os << quote_char << in[f.column] << quote_char;
+            }
+            else {
+                os << in[f.column];
             }
         }
         os << eol_str;
