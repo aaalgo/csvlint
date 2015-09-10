@@ -2,7 +2,12 @@
 #include <fstream>
 #include <unordered_set>
 #include <boost/format.hpp>
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/trim.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/program_options.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/utility/setup/console.hpp>
 #include "csvlint.h"
 
 using namespace std;
@@ -22,9 +27,9 @@ int main (int argc, char *argv[]) {
     ("help,h", "produce help message.")
     ("input,I", po::value(&input_path), "input path")
     ("output,O", po::value(&output_path), "output path")
-    (",M", po::value(&guess_size)->default_value(100), "")
-    ("fs", po::value(&fs_char)->default_value(','), "")
-    ("quote", po::value(&quote_char)->default_value('"'),"")
+    (",M", po::value(&guess_size)->default_value(10), "")
+    ("fs", po::value(&fs_char), "")
+    ("quote", po::value(&quote_char),"")
     ("field,f", po::value(&fields), "")
     ;
     po::options_description desc("Allowed options");
@@ -33,7 +38,6 @@ int main (int argc, char *argv[]) {
     po::positional_options_description p;
     p.add("input", 1);
     p.add("output", 1);
-    p.add("field", -1);
 
     po::variables_map vm; 
     po::store(po::command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
@@ -43,6 +47,19 @@ int main (int argc, char *argv[]) {
         cout << "Usage: 101 [OTHER OPTIONS]... <data> [test]" << endl;
         cout << desc_visible << endl;
         return 0;
+    }
+    boost::log::add_console_log(cerr);
+    {
+        vector<string> fs;
+        for (auto const &f: fields) {
+            using namespace boost::algorithm;
+            vector<string> ss;
+            split(ss, f, is_any_of(","), token_compress_on);
+            for (string const &s: ss) {
+                fs.push_back(s);
+            }
+        }
+        fields.swap(fs);
     }
 
     csvlint::Format fmt;
@@ -72,7 +89,11 @@ int main (int argc, char *argv[]) {
         }
     }
 
-    ofstream os(output_path);
+    ofstream os_file;
+    if (output_path.size()) {
+        os_file.open(output_path.c_str());
+    }
+    ostream &os = output_path.size() ? os_file : cout;
     tofmt.write_header(os);
     ifstream is(input_path);
     string line;
@@ -82,7 +103,6 @@ int main (int argc, char *argv[]) {
         fmt.parse(csvlint::crange(line), &cols);
         tofmt.write_line(os, cols);
     }
-
     return 0;
 }
 
